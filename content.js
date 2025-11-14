@@ -7,14 +7,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     const data = request.data;
     
     try {
-      // Bắt đầu điền form
-      fillField('textarea[name="title"]', data.title); // Sửa selector cho title
-      fillField('textarea[name="description"]', data.description); // Sửa selector cho description
+      // --- CẬP NHẬT SELECTORS ---
+      // Title
+      fillField('#listing-title-input', data.title);
       
-      // Xử lý Tags (phần này hơi phức tạp)
+      // Description
+      fillField('#listing-description-textarea', data.description);
+      
+      // Tags
       fillTags(data.tags);
 
-      // Xử lý Ảnh (phần KHÓ NHẤT)
+      // Ảnh
       uploadImages(data.imageBase64s);
 
       sendResponse({ success: true });
@@ -32,16 +35,17 @@ function fillField(selector, value) {
   const element = document.querySelector(selector);
   if (element) {
     // Gán giá trị một cách tự nhiên
-    const nativeValueSetter = Object.getOwnPropertyDescriptor(
-      window.HTMLTextAreaElement.prototype, 
-      'value'
-    )?.set;
+    // (Kiểm tra xem element là textarea hay input, mặc dù cả 2 đều có prototype này)
+    const prototype = (element.tagName === 'TEXTAREA') 
+        ? window.HTMLTextAreaElement.prototype 
+        : window.HTMLInputElement.prototype;
+        
+    const nativeValueSetter = Object.getOwnPropertyDescriptor(prototype, 'value')?.set;
     
     if (nativeValueSetter) {
         nativeValueSetter.call(element, value);
     } else {
-        // Fallback
-        element.value = value;
+        element.value = value; // Fallback
     }
 
     // Gửi sự kiện 'input' và 'change' để React của Etsy nhận biết
@@ -52,40 +56,50 @@ function fillField(selector, value) {
   }
 }
 
-// Hàm hỗ trợ điền tags (cần kiểm tra lại selector)
+// Hàm hỗ trợ điền tags (cập nhật selector)
 function fillTags(tags) {
-  // Selector cho input tags của Etsy (có thể thay đổi)
-  const tagInput = document.querySelector('input[name="tags"]');
-  if (tagInput) {
+  // --- CẬP NHẬT SELECTORS ---
+  const tagInput = document.querySelector('#listing-tags-input');
+  const addButton = document.querySelector('#listing-tags-button'); // Nút "Add" mới
+
+  if (tagInput && addButton) {
     tags.forEach(tag => {
-      tagInput.value = tag;
-      tagInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', charCode: 13, keyCode: 13, bubbles: true }));
+      // Dùng hàm fillField để React nhận diện
+      fillField('#listing-tags-input', tag);
+      
+      // Click nút "Add"
+      addButton.click();
     });
   } else {
-    console.warn("Không tìm thấy ô nhập tag (input[name='tags']). Bỏ qua...");
+    console.warn("Không tìm thấy ô nhập tag (#listing-tags-input) hoặc nút 'Add' (#listing-tags-button). Bỏ qua tags...");
   }
 }
 
-// --- PHẦN KHÓ NHẤT: UPLOAD ẢNH ---
+// --- PHẦN UPLOAD ẢNH (CẬP NHẬT SELECTOR) ---
 async function uploadImages(base64s) {
-  // 1. Tìm khu vực dropzone (Bạn PHẢI tự tìm selector này)
-  // Đây là selector khả thi nhất cho dropzone của Etsy
-  const dropzone = document.querySelector('div[data-ui-id="drop-zone-overlay"]');
+  // --- CẬP NHẬT SELECTOR ---
+  // Chúng ta sẽ nhắm mục tiêu vào khu vực upload chính
+  const dropzone = document.querySelector('div[data-clg-id="WtUploadArea"]');
   
   if (!dropzone) {
-    throw new Error("Không tìm thấy khu vực upload ảnh (dropzone). Giao diện Etsy đã thay đổi.");
+    // Fallback: Thử tìm một input file trống
+    const fileInput = document.querySelector('input[name="listing-media-upload"]');
+    if (fileInput) {
+      console.log("Không tìm thấy WtUploadArea, thử dùng input file trực tiếp...");
+      await uploadImagesToInput(fileInput, base64s);
+      return;
+    }
+    throw new Error("Không tìm thấy khu vực upload ảnh (WtUploadArea) hoặc input file. Giao diện Etsy đã thay đổi.");
   }
 
-  // 2. Chuyển base64 về File Object
   const files = await Promise.all(
     base64s.map((b64, index) => base64ToFile(b64, `mockup-${index}.png`))
   );
 
-  // 3. Tạo sự kiện Kéo và Thả
   const dataTransfer = new DataTransfer();
   files.forEach(file => dataTransfer.items.add(file));
 
-  // 4. Mô phỏng sự kiện
+  // Mô phỏng sự kiện
   dropzone.dispatchEvent(new DragEvent('dragenter', { bubbles: true, dataTransfer }));
   dropzone.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer }));
   dropzone.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer }));
@@ -93,7 +107,23 @@ async function uploadImages(base64s) {
   console.log("Đã mô phỏng thả ảnh!");
 }
 
-// Hàm hỗ trợ chuyển Base64 sang File
+// Hàm fallback: upload trực tiếp vào input
+async function uploadImagesToInput(fileInput, base64s) {
+  const files = await Promise.all(
+    base64s.map((b64, index) => base64ToFile(b64, `mockup-${index}.png`))
+  );
+
+  const dataTransfer = new DataTransfer();
+  files.forEach(file => dataTransfer.items.add(file));
+
+  fileInput.files = dataTransfer.files;
+  // Kích hoạt sự kiện onchange
+  fileInput.dispatchEvent(new Event('change', { bubbles: true }));
+  console.log("Đã gán file vào input!");
+}
+
+
+// Hàm hỗ trợ chuyển Base64 sang File (giữ nguyên)
 async function base64ToFile(base64, filename) {
   const res = await fetch(base64);
   const blob = await res.blob();

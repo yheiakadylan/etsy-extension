@@ -1,9 +1,8 @@
 // popup.js
 
-// !!! QUAN TRỌNG: Thay thế URL này bằng URL Vercel app của bạn
 const API_URL = "https://imagetoupload.vercel.app"; 
 
-// Lấy các element từ HTML
+// Cập nhật các element
 const loginView = document.getElementById('login-view');
 const listView = document.getElementById('list-view');
 const loginForm = document.getElementById('login-form');
@@ -11,10 +10,14 @@ const loginButton = document.getElementById('login-button');
 const loginError = document.getElementById('login-error');
 const welcomeUser = document.getElementById('welcome-user');
 const logoutButton = document.getElementById('logout-button');
-const listingList = document.getElementById('listing-list');
-const listMessage = document.getElementById('list-message');
 
-// Hiển thị giao diện dựa trên trạng thái đăng nhập
+// Selectors cho 2 danh sách
+const pendingList = document.getElementById('pending-list');
+const pendingListMessage = document.getElementById('pending-list-message');
+const appliedList = document.getElementById('applied-list');
+const appliedListMessage = document.getElementById('applied-list-message');
+
+// (Giữ nguyên hàm showLoginView, showListView, và event listener 'DOMContentLoaded')
 function showLoginView() {
   loginView.classList.remove('hidden');
   listView.classList.add('hidden');
@@ -29,10 +32,9 @@ async function showListView() {
   loginView.classList.add('hidden');
   listView.classList.remove('hidden');
   welcomeUser.textContent = `Chào, ${username}!`;
-  loadListings();
+  loadListings(); // Tải danh sách khi hiển thị
 }
 
-// 1. Kiểm tra trạng thái đăng nhập khi mở popup
 document.addEventListener('DOMContentLoaded', async () => {
   const { idToken } = await chrome.storage.local.get('idToken');
   if (idToken) {
@@ -42,7 +44,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 });
 
-// 2. Xử lý Form Đăng nhập
+
+// (Giữ nguyên event listener 'loginForm.addEventListener')
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const username = document.getElementById('login-username').value;
@@ -63,7 +66,6 @@ loginForm.addEventListener('submit', async (e) => {
       throw new Error(data.error || 'Đăng nhập thất bại');
     }
 
-    // Lưu token và username vào bộ nhớ extension
     await chrome.storage.local.set({ idToken: data.token, username: username });
     showListView();
 
@@ -76,16 +78,59 @@ loginForm.addEventListener('submit', async (e) => {
   }
 });
 
-// 3. Xử lý Đăng xuất
+// (Giữ nguyên event listener 'logoutButton.addEventListener')
 logoutButton.addEventListener('click', async () => {
   await chrome.storage.local.remove(['idToken', 'username']);
   showLoginView();
 });
 
-// 4. Tải danh sách Listings
+// --- HÀM TẠO ITEM CHO DANH SÁCH (Hàm mới) ---
+function createListItem(listing) {
+  const li = document.createElement('li');
+      
+  const titleSpan = document.createElement('span');
+  titleSpan.textContent = listing.title;
+  titleSpan.title = listing.title;
+  li.appendChild(titleSpan);
+  
+  const applyButton = document.createElement('button');
+  
+  // Nút sẽ có chữ khác nhau tùy theo status
+  applyButton.textContent = (listing.status === 'applied') ? 'Áp dụng lại' : 'Áp dụng';
+  
+  applyButton.onclick = () => {
+    applyButton.textContent = 'Đang...';
+    applyButton.disabled = true;
+    
+    chrome.runtime.sendMessage(
+      { type: "APPLY_LISTING", listingId: listing.id },
+      (response) => {
+        if (response && response.success) {
+          // THAY ĐỔI LỚN: Thay vì xóa <li>,
+          // chúng ta tải lại toàn bộ danh sách
+          // để nó tự động chuyển từ "pending" -> "applied"
+          loadListings();
+        } else {
+          alert(`Lỗi: ${response ? response.error : 'Không thể kết nối'}`);
+          // Reset nút về trạng thái cũ
+          applyButton.textContent = (listing.status === 'applied') ? 'Áp dụng lại' : 'Áp dụng';
+          applyButton.disabled = false;
+        }
+      }
+    );
+  };
+  
+  li.appendChild(applyButton);
+  return li;
+}
+
+// --- CẬP NHẬT HÀM TẢI DANH SÁCH ---
 async function loadListings() {
-  listingList.innerHTML = '';
-  listMessage.textContent = 'Đang tải...';
+  // Xóa nội dung cũ
+  pendingList.innerHTML = '';
+  appliedList.innerHTML = '';
+  pendingListMessage.textContent = 'Đang tải...';
+  appliedListMessage.textContent = ''; // Xóa tin nhắn danh sách đã áp dụng
 
   try {
     const { idToken } = await chrome.storage.local.get('idToken');
@@ -102,48 +147,33 @@ async function loadListings() {
       throw new Error(listings.error || "Lỗi tải danh sách");
     }
 
-    if (listings.length === 0) {
-      listMessage.textContent = 'Không có listing nào đang chờ.';
-      return;
+    // Lọc danh sách ra làm 2
+    const pending = listings.filter(l => l.status !== 'applied');
+    const applied = listings.filter(l => l.status === 'applied');
+
+    // Xử lý danh sách "Chưa áp dụng"
+    if (pending.length === 0) {
+      pendingListMessage.textContent = 'Không có listing nào đang chờ.';
+    } else {
+      pendingListMessage.textContent = '';
+      pending.forEach((listing) => {
+        pendingList.appendChild(createListItem(listing));
+      });
     }
 
-    listMessage.textContent = '';
-    listings.forEach((listing) => {
-      const li = document.createElement('li');
-      
-      const titleSpan = document.createElement('span');
-      titleSpan.textContent = listing.title;
-      titleSpan.title = listing.title;
-      li.appendChild(titleSpan);
-      
-      const applyButton = document.createElement('button');
-      applyButton.textContent = 'Áp dụng';
-      applyButton.onclick = () => {
-        applyButton.textContent = 'Đang...';
-        applyButton.disabled = true;
-        
-        // Gửi yêu cầu cho background.js để xử lý
-        chrome.runtime.sendMessage(
-          { type: "APPLY_LISTING", listingId: listing.id },
-          (response) => {
-            if (response && response.success) {
-              li.remove(); // Xóa khỏi danh sách sau khi áp dụng
-            } else {
-              alert(`Lỗi: ${response ? response.error : 'Không thể kết nối'}`);
-              applyButton.textContent = 'Áp dụng';
-              applyButton.disabled = false;
-            }
-          }
-        );
-      };
-      
-      li.appendChild(applyButton);
-      listingList.appendChild(li);
-    });
+    // Xử lý danh sách "Đã áp dụng"
+    if (applied.length === 0) {
+      appliedListMessage.textContent = 'Chưa có listing nào được áp dụng.';
+    } else {
+      appliedListMessage.textContent = '';
+      applied.forEach((listing) => {
+        appliedList.appendChild(createListItem(listing));
+      });
+    }
 
   } catch (error) {
     console.error("Lỗi tải listings:", error);
-    listMessage.textContent = 'Lỗi khi tải danh sách.';
+    pendingListMessage.textContent = 'Lỗi khi tải danh sách.';
     if (error.message.includes("Chưa đăng nhập")) {
       showLoginView();
     }

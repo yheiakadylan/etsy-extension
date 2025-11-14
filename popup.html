@@ -5,7 +5,6 @@
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-  <!-- Màn hình Đăng nhập -->
   <div id="login-view">
     <h3>Đăng nhập AI Studio</h3>
     <form id="login-form">
@@ -16,15 +15,21 @@
     </form>
   </div>
 
-  <!-- Màn hình Danh sách Listing -->
   <div id="list-view" class="hidden">
     <div class="header">
       <h3 id="welcome-user"></h3>
       <button id="logout-button">Đăng xuất</button>
     </div>
-    <p>Chọn listing để áp dụng lên trang Etsy:</p>
-    <ul id="listing-list"></ul>
-    <p id="list-message"></p>
+    
+    <h4 class="list-header">Chưa áp dụng</h4>
+    <ul id="pending-list"></ul>
+    <p id="pending-list-message" class="list-message"></p>
+
+    <hr class="divider">
+
+    <h4 class="list-header">Đã áp dụng (có thể dùng lại)</h4>
+    <ul id="applied-list"></ul>
+    <p id="applied-list-message" class="list-message"></p>
   </div>
   
   <script type="module" src="popup.js"></script>
