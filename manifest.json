@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "AI Studio Listing Helper",
+  "version": "1.0.0",
+  "description": "Áp dụng các listing đã lưu từ AI Studio lên Etsy.",
+  "permissions": [
+    "storage",    
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://imagetoupload.vercel.app/*",
+    "https://www.etsy.com/your/listings/create*",
+    "https://www.etsy.com/listing/copy/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon.png"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.etsy.com/your/listings/create*",
+        "https://www.etsy.com/listing/copy/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}
