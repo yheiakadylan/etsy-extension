@@ -28,12 +28,13 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         
         console.log(`Đã lấy chi tiết listing, ${data.imageBase64s.length} ảnh`);
 
-        // 3. Tìm tab Etsy đang hoạt động
+        // 3. Tìm tab Etsy đang hoạt động (ĐÃ CẬP NHẬT URL)
         const tabs = await chrome.tabs.query({
           active: true,
           url: [
             "https://*.etsy.com/your/listings/create*",
-            "https://*.etsy.com/listing/copy/*"
+            "https://*.etsy.com/listing/copy/*",
+            "https://*.etsy.com/your/shops/me/listing-editor/copy/*" 
           ]
         });
 
@@ -52,6 +53,6 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     })();
     
-    return true; // Báo hiệu rằng sendResponse sẽ được gọi bất đồng bộ
+    return true; 
   }
 });

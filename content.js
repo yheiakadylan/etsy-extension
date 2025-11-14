@@ -1,41 +1,49 @@
 // content.js
-console.log("AI Studio Helper đã được tiêm vào trang!");
+console.log("AI Studio Helper đã được tiêm vào trang! (v3)");
 
+// Hàm hỗ trợ delay
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// --- LÀM CHO LISTENER BẤT ĐỒNG BỘ ---
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "FILL_FORM") {
     console.log("Content script nhận được data:", request.data);
     const data = request.data;
     
-    try {
-      // --- CẬP NHẬT SELECTORS ---
-      // Title
-      fillField('#listing-title-input', data.title);
-      
-      // Description
-      fillField('#listing-description-textarea', data.description);
-      
-      // Tags
-      fillTags(data.tags);
+    // Dùng (async () => {})() để xử lý bất đồng bộ
+    (async () => {
+      try {
+        // 1. Điền Title
+        fillField('#listing-title-input', data.title);
+        
+        // 2. Điền Description
+        fillField('#listing-description-textarea', data.description);
+        
+        // 3. Điền Tags (kiểu mới)
+        fillTags(data.tags);
 
-      // Ảnh
-      uploadImages(data.imageBase64s);
+        // 4. Xóa ảnh cũ (TÍNH NĂNG MỚI)
+        await deleteExistingImages();
 
-      sendResponse({ success: true });
-    } catch (error) {
-      console.error("Lỗi khi điền form:", error);
-      alert(`Extension Lỗi: ${error.message}. Có thể giao diện Etsy đã thay đổi.`);
-      sendResponse({ success: false, error: error.message });
-    }
+        // 5. Upload ảnh mới
+        await uploadImages(data.imageBase64s);
+
+        sendResponse({ success: true });
+      } catch (error) {
+        console.error("Lỗi khi điền form:", error);
+        alert(`Extension Lỗi: ${error.message}. Có thể giao diện Etsy đã thay đổi.`);
+        sendResponse({ success: false, error: error.message });
+      }
+    })(); // Gọi hàm async ngay lập tức
   }
-  return true;
+  return true; // Rất quan trọng: Báo với Chrome là sendResponse sẽ được gọi sau
 });
 
-// Hàm hỗ trợ điền text (và kích hoạt React)
+// Hàm fillField (giữ nguyên, không đổi)
 function fillField(selector, value) {
   const element = document.querySelector(selector);
   if (element) {
     // Gán giá trị một cách tự nhiên
-    // (Kiểm tra xem element là textarea hay input, mặc dù cả 2 đều có prototype này)
     const prototype = (element.tagName === 'TEXTAREA') 
         ? window.HTMLTextAreaElement.prototype 
         : window.HTMLInputElement.prototype;
@@ -56,28 +64,55 @@ function fillField(selector, value) {
   }
 }
 
-// Hàm hỗ trợ điền tags (cập nhật selector)
-function fillTags(tags) {
+// --- HÀM TAGS ĐÃ SỬA ---
+async function fillTags(tags) {
   // --- CẬP NHẬT SELECTORS ---
   const tagInput = document.querySelector('#listing-tags-input');
-  const addButton = document.querySelector('#listing-tags-button'); // Nút "Add" mới
+  const addButton = document.querySelector('#listing-tags-button'); // Nút "Add"
 
   if (tagInput && addButton) {
-    tags.forEach(tag => {
-      // Dùng hàm fillField để React nhận diện
-      fillField('#listing-tags-input', tag);
-      
-      // Click nút "Add"
-      addButton.click();
-    });
+    // 1. Gộp tất cả tag thành MỘT chuỗi, cách nhau bằng dấu phẩy
+    const tagString = tags.join(',');
+
+    // 2. Điền MỘT chuỗi này vào ô input
+    fillField('#listing-tags-input', tagString);
+    await wait(100);    
+    // 3. Click nút "Add" để Etsy xử lý chuỗi
+    addButton.click();
+    
+    console.log("Đã điền chuỗi tag và click 'Add'.");
   } else {
     console.warn("Không tìm thấy ô nhập tag (#listing-tags-input) hoặc nút 'Add' (#listing-tags-button). Bỏ qua tags...");
   }
 }
 
-// --- PHẦN UPLOAD ẢNH (CẬP NHẬT SELECTOR) ---
+// --- HÀM MỚI: XÓA ẢNH CŨ ---
+async function deleteExistingImages() {
+  console.log("Đang tìm và xóa ảnh cũ...");
+  // Selector dựa trên HTML bạn cung cấp
+  const deleteButtons = document.querySelectorAll('button[data-testid="image-delete-button"]');
+  
+  if (deleteButtons.length === 0) {
+    console.log("Không tìm thấy ảnh cũ để xóa.");
+    return;
+  }
+
+  console.log(`Tìm thấy ${deleteButtons.length} ảnh cũ. Đang xóa...`);
+  
+  for (const button of deleteButtons) {
+    button.click();
+    // Chờ một chút để UI kịp cập nhật
+    await wait(250); 
+  }
+  
+  console.log("Đã xóa xong ảnh cũ. Chờ 1 giây trước khi upload ảnh mới...");
+  // Chờ 1 giây để Etsy xử lý xong việc xóa
+  await wait(1000); 
+}
+
+// --- HÀM UPLOAD ẢNH (giữ nguyên, chỉ gọi sau hàm xóa) ---
 async function uploadImages(base64s) {
-  // --- CẬP NHẬT SELECTOR ---
+  console.log("Bắt đầu upload ảnh mới...");
   // Chúng ta sẽ nhắm mục tiêu vào khu vực upload chính
   const dropzone = document.querySelector('div[data-clg-id="WtUploadArea"]');
   
@@ -104,7 +139,7 @@ async function uploadImages(base64s) {
   dropzone.dispatchEvent(new DragEvent('dragover', { bubbles: true, dataTransfer }));
   dropzone.dispatchEvent(new DragEvent('drop', { bubbles: true, dataTransfer }));
   
-  console.log("Đã mô phỏng thả ảnh!");
+  console.log("Đã mô phỏng thả ảnh mới!");
 }
 
 // Hàm fallback: upload trực tiếp vào input

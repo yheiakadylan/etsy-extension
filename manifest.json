@@ -10,7 +10,8 @@
   "host_permissions": [
     "https://imagetoupload.vercel.app/*",
     "https://www.etsy.com/your/listings/create*",
-    "https://www.etsy.com/listing/copy/*"
+    "https://www.etsy.com/listing/copy/*",
+    "https://*.etsy.com/your/shops/me/listing-editor/copy/*" 
   ],
   "action": {
     "default_popup": "popup.html",
@@ -24,7 +25,8 @@
     {
       "matches": [
         "https://www.etsy.com/your/listings/create*",
-        "https://www.etsy.com/listing/copy/*"
+        "https://www.etsy.com/listing/copy/*",
+        "https://*.etsy.com/your/shops/me/listing-editor/copy/*"
       ],
       "js": ["content.js"]
     }
